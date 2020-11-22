@@ -305,8 +305,8 @@ def main():
             rospy.logerr('Unknown state!')
         
         pub_.publish(msg)
-	cmd="%03.2f*%04.3f" %(msg.linear.x, msg.angular.z) 
-	c28x_data=os.open("curl -s http://192.168.0.4/param?C="+cmd).read().strip()
+	    cmd="%03.2f*%05.4f" %(msg.linear.x, msg.angular.z) 
+	    c28x_data=os.open("curl -s http://192.168.0.4/param?C="+cmd).read().strip()
  
         
         rate.sleep()
