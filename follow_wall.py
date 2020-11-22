@@ -11,7 +11,7 @@ from geometry_msgs.msg import Twist
 import random
 import math
 import time
-import socket
+import os
 
 hz = 20                     # Cycle Frequency
 loop_index = 0              # Number of sampling cycles
@@ -305,11 +305,9 @@ def main():
             rospy.logerr('Unknown state!')
         
         pub_.publish(msg)
-        # msg2send="%03.2f*%03.2f" %(msg.linear.x, msg.angular.z) 
-        # client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # client.connect((socket.gethostname(), port))
-        # client.send(("GET /cmd?=C01" + msg2send).encode('utf-8'))
-        # client.close()  
+	cmd="%03.2f*%04.3f" %(msg.linear.x, msg.angular.z) 
+	c28x_data=os.open("curl -s http://192.168.0.4/param?C="+cmd).read().strip()
+ 
         
         rate.sleep()
 
