@@ -299,6 +299,12 @@ def slow_forward():
     msg.angular.z = 0
     return msg
 
+def turn_right():
+    msg = Twist()
+    msg.linea.x = 0
+    msg.angular.z = -1
+    return msg
+
 
 def main():
     global pub_, active_, hz, loop_index, main_state
@@ -328,6 +334,8 @@ def main():
                 rospy.logerr('Unknown state!')
         elif(main_state == 2 ):
             msg = turn_right()
+            time.sleep(1)
+            main_state = 3
         elif(main_state == 3 ):
             msg = realsense()
         else:
@@ -337,7 +345,7 @@ def main():
         
         cmd="%05.3f*%07.4f"%(msg.linear.x,msg.angular.z)
         print cmd
-	    c28x_data=os.open("curl -s http://192.168.0.4/param?C="+cmd).read().strip()
+	    # c28x_data=os.open("curl -s http://192.168.0.4/param?C="+cmd).read().strip()
  
         
         rate.sleep()
