@@ -19,8 +19,8 @@ loop_index_outer_corner = 0 # Loop index when the outer corner is detected
 loop_index_inner_corner = 0 # Loop index when the inner corner is detected
 inf = 6                     # Limit to Laser sensor range in meters, all distances above this value are 
                             #      considered out of sensor range
-wall_dist = 0.5             # Distance desired from the wall
-max_speed = 0.3             # Maximum speed of the robot on meters/seconds
+wall_dist = 0.3             # Distance desired from the wall
+max_speed = 0.4             # Maximum speed of the robot on meters/seconds
 p = 15                      # Proportional constant for controller  
 d = 0                       # Derivative constant for controller 
 angle = 1                   # Proportional constant for angle controller (just simple P controller)
@@ -30,6 +30,8 @@ angle_min = 0               # Angle, at which was measured the shortest distance
 dist_front = 0              # Measured front distance
 diff_e = 0                  # Difference between current error and previous one
 dist_min = 0                # Minimum measured distance
+
+inf_=0.5
 
 # Time when the last outer corner; direction and inner corner were detected or changed.
 last_outer_corner_detection_time = time.time()
@@ -64,6 +66,7 @@ state_dict_ = {
     1: 'following wall',
     2: 'rotating'
 }
+main_state=0
 
 def clbk_laser(msg):
     """
@@ -130,7 +133,7 @@ def take_action():
     """
     global regions_, index, last_kinds_of_wall, index_state_outer_inner, state_outer_inner, loop_index, loop_index_outer_corner
     
-    global wall_dist, max_speed, direction, p, d, angle, dist_min, wall_found, rotating, bool_outer_corner, bool_inner_corner
+    global wall_dist, max_speed, direction, p, d, angle, dist_min, wall_found, rotating, bool_outer_corner, bool_inner_corner, main_state
 
     regions = regions_
     msg = Twist()
@@ -160,6 +163,17 @@ def take_action():
     else:
         state_description = 'case 1 - following wall'
         change_state(1)
+
+    if regions['fright'] < inf_ and regions['fleft'] < inf_ and regions['left'] > inf_ and regions['right'] > inf_ and regions['bright'] > inf_ and regions['bleft'] > inf_:
+        main_state = 0
+    elif regions['fright'] < inf_ and regions['fleft'] < inf_ and regions['left'] < inf_ and regions['right'] < inf_ and regions['bright'] > inf_ and regions['bleft'] > inf_:
+        main_state = 1
+    elif regions['fright'] < inf_ and regions['fleft'] < inf_ and regions['left'] < inf_ and regions['right'] < inf_ and regions['bright'] < inf_ and regions['bleft'] < inf_:
+        main_state = 1
+    elif regions['fright'] > inf_ and regions['fleft'] > inf_ and regions['left'] < inf_ and regions['right'] < inf_ and regions['bright'] < inf_ and regions['bleft'] < inf_:
+        main_state = 0
+    elif regions['fright'] > inf_ and regions['fleft'] > inf_ and regions['left'] > inf_ and regions['right'] > inf_ and regions['bright'] < inf_ and regions['bleft'] < inf_:
+        main_state = 2
 
 def random_wandering():
     """
@@ -278,9 +292,16 @@ def is_inner_corner():
             state_outer_inner.append('I')
             print 'It is a inner corner'
     return bool_inner_corner
+    
+def slow_forward():
+    msg = Twist()
+    msg.linear.x = 0.2
+    msg.angular.z = 0
+    return msg
+
 
 def main():
-    global pub_, active_, hz, loop_index
+    global pub_, active_, hz, loop_index, main_state
     
     rospy.init_node('follow_wall')
     
@@ -293,19 +314,29 @@ def main():
     while not rospy.is_shutdown():
         loop_index = loop_index + 1
         msg = Twist()
-
-        # State Dispatcher
-        if state_ == 0:
-            msg = random_wandering()
-        elif state_ == 1:
-            msg = following_wall()
-        elif state_ == 2:
-            msg = rotating()
+        if(main_state == 0):
+            msg = slow_forward()
+        elif(main_state == 1):
+            # State Dispatcher
+            if state_ == 0:
+                msg = random_wandering()
+            elif state_ == 1:
+                msg = following_wall()
+            elif state_ == 2:
+                msg = rotating()
+            else:
+                rospy.logerr('Unknown state!')
+        elif(main_state == 2 ):
+            msg = turn_right()
+        elif(main_state == 3 ):
+            msg = realsense()
         else:
-            rospy.logerr('Unknown state!')
+            rospy.logerr('Unknown main state!')
         
         pub_.publish(msg)
-	    cmd="%03.2f*%05.4f" %(msg.linear.x, msg.angular.z) 
+        
+        cmd="%05.3f*%07.4f"%(msg.linear.x,msg.angular.z)
+        print cmd
 	    c28x_data=os.open("curl -s http://192.168.0.4/param?C="+cmd).read().strip()
  
         
