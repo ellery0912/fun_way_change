@@ -166,18 +166,18 @@ def take_action():
         state_description = 'case 1 - following wall'
         change_state(1)
 
-    if regions['fright'] < inf_ and regions['fleft'] < inf_ and regions['left'] > inf_ and regions['right'] > inf_ and regions['bright'] > inf_ and regions['bleft'] > inf_:
-        main_state = 0
-    elif regions['fright'] < inf_ and regions['fleft'] < inf_ and regions['left'] < inf_ and regions['right'] < inf_ and regions['bright'] > inf_ and regions['bleft'] > inf_:
-        main_state = 1
-    elif regions['fright'] < inf_ and regions['fleft'] < inf_ and regions['left'] < inf_ and regions['right'] < inf_ and regions['bright'] < inf_ and regions['bleft'] < inf_:
-        main_state = 1
-    elif regions['fright'] > inf_ and regions['fleft'] > inf_ and regions['left'] < inf_ and regions['right'] < inf_ and regions['bright'] < inf_ and regions['bleft'] < inf_:
-        main_state = 0
-    elif regions['fright'] > inf_ and regions['fleft'] > inf_ and regions['left'] > inf_ and regions['right'] > inf_ and regions['bright'] < inf_ and regions['bleft'] < inf_:
-        main_state = 2
-    elif regions['fright'] < inf_ and regions['fleft'] > inf_ and regions['left'] > inf_ and regions['right'] > inf_ and regions['bright'] < inf_ and regions['bleft'] > inf_:
-        main_state = 3
+    # if regions['fright'] < inf_ and regions['fleft'] < inf_ and regions['left'] > inf_ and regions['right'] > inf_ and regions['bright'] > inf_ and regions['bleft'] > inf_:
+    #     main_state = 0
+    # elif regions['fright'] < inf_ and regions['fleft'] < inf_ and regions['left'] < inf_ and regions['right'] < inf_ and regions['bright'] > inf_ and regions['bleft'] > inf_:
+    #     main_state = 1
+    # elif regions['fright'] < inf_ and regions['fleft'] < inf_ and regions['left'] < inf_ and regions['right'] < inf_ and regions['bright'] < inf_ and regions['bleft'] < inf_:
+    #     main_state = 1
+    # elif regions['fright'] > inf_ and regions['fleft'] > inf_ and regions['left'] < inf_ and regions['right'] < inf_ and regions['bright'] < inf_ and regions['bleft'] < inf_:
+    #     main_state = 0
+    # elif regions['fright'] > inf_ and regions['fleft'] > inf_ and regions['left'] > inf_ and regions['right'] > inf_ and regions['bright'] < inf_ and regions['bleft'] < inf_:
+    #     main_state = 2
+    # elif regions['fright'] < inf_ and regions['fleft'] > inf_ and regions['left'] > inf_ and regions['right'] > inf_ and regions['bright'] < inf_ and regions['bleft'] > inf_:
+    #     main_state = 3
 
 def random_wandering():
     """
@@ -394,7 +394,7 @@ def main():
                     msg=Twist()
                     msg.linear.X=v
                     msg.angular.z=w
-                    cmd="%05.3f*%07.4f"%(msg.linear.x,msg.angular.z)
+                    cmd="%05.2f*%05.2f"%(msg.linear.x,msg.angular.z)
                     print cmd
 	                c28x_data=os.popen("curl -s http://169.254.254.169/cmd?=C01"+cmd).read().strip()
                     rate.sleep()
@@ -409,7 +409,7 @@ def main():
         
         pub_.publish(msg)
         
-        cmd="%05.3f*%07.4f"%(msg.linear.x,msg.angular.z)
+        cmd="%05.2f*%05.2f"%(msg.linear.x,msg.angular.z)
         print cmd
 	    c28x_data=os.popen("curl -s http://169.254.254.169/cmd?=C01"+cmd).read().strip()
  
