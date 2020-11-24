@@ -6,7 +6,9 @@ from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
 #from tf import transformations
 #from datetime import datetime
-
+import pyrealsense2 as rs
+import numpy as np
+import cv2
 # Util imports
 import random
 import math
@@ -94,10 +96,10 @@ def clbk_laser(msg):
         'bright':  min(min(msg.ranges[0:51]), inf),
         'right': min(min(msg.ranges[52:102]), inf),
         'fright':  min(min(msg.ranges[103:153]), inf),
-        'front':  min(min(msg.ranges[154:204]), inf),
-        'fleft':   min(min(msg.ranges[205:255]), inf),
-        'left':   min(min(msg.ranges[256:306]), inf),
-        'bleft':   min(min(msg.ranges[307:359]), inf),
+        'front':  min(min(msg.ranges[154:205]), inf),
+        'fleft':   min(min(msg.ranges[206:256]), inf),
+        'left':   min(min(msg.ranges[257:307]), inf),
+        'bleft':   min(min(msg.ranges[308:359]), inf),
     }
     #rospy.loginfo(regions_)
 
@@ -174,6 +176,8 @@ def take_action():
         main_state = 0
     elif regions['fright'] > inf_ and regions['fleft'] > inf_ and regions['left'] > inf_ and regions['right'] > inf_ and regions['bright'] < inf_ and regions['bleft'] < inf_:
         main_state = 2
+    elif regions['fright'] < inf_ and regions['fleft'] > inf_ and regions['left'] > inf_ and regions['right'] > inf_ and regions['bright'] < inf_ and regions['bleft'] > inf_:
+        main_state = 3
 
 def random_wandering():
     """
@@ -221,7 +225,7 @@ def change_direction():
         1 for wall on the left side of the robot and -1 for the right side
     """
     global direction, last_change_direction, rotating
-    print 'Change direction!'
+    print 'Change direction!'c28x_data=os.popen("curl -s http://169.254.254.169/cmd?=C01"+cmd).read().strip()
     elapsed_time = time.time() - last_change_direction_time # Elapsed time since last change direction
     if elapsed_time >= 20:
         last_change_direction = time.time()
@@ -334,10 +338,72 @@ def main():
                 rospy.logerr('Unknown state!')
         elif(main_state == 2 ):
             msg = turn_right()
-            time.sleep(1)
-            main_state = 3
         elif(main_state == 3 ):
-            msg = realsense()
+            
+            # Configure depth and color streams
+            pipeline = rs.pipeline()
+            config = rs.config()
+            config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+            config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+
+            # Start streaming
+            profile=pipeline.start(config)
+            depth_sensor = profile.get_device().first_depth_sensor()
+            depth_scale = depth_sensor.get_depth_scale()
+
+            try:
+                while True:
+                    # Wait for a coherent pair of frames: depth and color
+                    frames = pipeline.wait_for_frames()
+                    depth_frame = frames.get_depth_frame()
+                    color_frame = frames.get_color_frame()
+                    depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
+                    color_intrin = color_frame.profile.as_video_stream_profile().intrinsics
+                    depth_to_color_extrin = depth_frame.profile.get_extrinsics_to(color_frame.profile)
+                    if not depth_frame or not color_frame:
+                        continue
+                    color_image=np.asanyarray(color_frame.get_data())
+                    depth_image=np.asanyarray(depth_frame.get_data())
+                    hsv = cv2.cvtColor(color_image, cv2.COLOR_BGR2HSV) 
+                    lower = np.array([35,43,46]) 
+                    upper = np.array([77, 255, 255]) 
+                    mask = cv2.inRange(hsv,lower,upper)
+                    moments = cv2.moments(mask)
+	                res=cv2.bitwise_and(color_image,color_image,mask=mask)
+	                imgray=cv2.cvtColor(res, cv2.COLOR_BGR2GRAY)
+                    zeros=cv2.countNonZero(imgray)
+                    zero=float(zeros)/307200
+                	v=0
+	                w=0
+	                if zero>0.15:
+                        m00 = moments['m00']
+                    if m00 != 0:
+                        centroid_x = int(moments['m10']/m00)#Take X coordinate
+                        centroid_y = int(moments['m01']/m00)#Take Y coordinate
+                        cv2.circle(res, (centroid_x,centroid_y), 15, (0,0,255))
+                        depth_pixel=[centroid_x,centroid_y]
+                        if centroid_x<480 and centroid_y<640:  
+                            depth_value = depth_image[centroid_x,centroid_y].astype(float)
+                            depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, depth_pixel, depth_value*depth_scale)
+                            depth_point[1]-=0.08
+	                        depth_point[2]+=0.15
+	                        print(depth_point)
+	                        if depth_point[2]>0.2:
+		                        v=0.2
+		                        w=math.atan(depth_point[2]/depth_point[0])/(depth_point[2]/v)
+                    msg=Twist()
+                    msg.linear.X=v
+                    msg.angular.z=w
+                    cmd="%05.3f*%07.4f"%(msg.linear.x,msg.angular.z)
+                    print cmd
+	                c28x_data=os.popen("curl -s http://169.254.254.169/cmd?=C01"+cmd).read().strip()
+                    rate.sleep()
+        finally:
+            pipeline.stop()
+
+
+
+
         else:
             rospy.logerr('Unknown main state!')
         
@@ -345,7 +411,7 @@ def main():
         
         cmd="%05.3f*%07.4f"%(msg.linear.x,msg.angular.z)
         print cmd
-	    # c28x_data=os.open("curl -s http://192.168.0.4/param?C="+cmd).read().strip()
+	    c28x_data=os.popen("curl -s http://169.254.254.169/cmd?=C01"+cmd).read().strip()
  
         
         rate.sleep()
