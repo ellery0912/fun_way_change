@@ -6,9 +6,9 @@ from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
 #from tf import transformations
 #from datetime import datetime
-import pyrealsense2 as rs
-import numpy as np
-import cv2
+# import pyrealsense2 as rs
+# import numpy as np
+# import cv2
 # Util imports
 import random
 import math
@@ -23,7 +23,7 @@ inf = 6                     # Limit to Laser sensor range in meters, all distanc
                             #      considered out of sensor range
 wall_dist = 0.3             # Distance desired from the wall
 max_speed = 0.4             # Maximum speed of the robot on meters/seconds
-p = 15                      # Proportional constant for controller  
+p = 0.5                      # Proportional constant for controller  
 d = 0                       # Derivative constant for controller 
 angle = 1                   # Proportional constant for angle controller (just simple P controller)
 direction = -1              # 1 for wall on the left side of the robot (-1 for the right side)
@@ -68,7 +68,7 @@ state_dict_ = {
     1: 'following wall',
     2: 'rotating'
 }
-main_state=0
+main_state=1
 
 def clbk_laser(msg):
     """
@@ -123,7 +123,7 @@ def change_state(state):
     """
     global state_, state_dict_
     if state is not state_:
-        #print 'Wall follower - [%s] - %s' % (state, state_dict_[state])
+        # print 'Wall follower - [%s] - %s' % (state, state_dict_[state])
         state_ = state
 
 def take_action():
@@ -215,7 +215,7 @@ def following_wall():
         msg.linear.x = 0.4*max_speed
     else:
         msg.linear.x = max_speed
-    msg.angular.z = max(min(direction*(p*e+d*diff_e) + angle*(angle_min-((math.pi)/2)*direction), 2.5), -2.5)
+    msg.angular.z = max(min(direction*(p*e+d*diff_e) + angle*(angle_min-((math.pi)/2)*direction), 0.4), -0.4)
     #print 'Turn Left angular z, linear x %f - %f' % (msg.angular.z, msg.linear.x)
     return msg
 
@@ -225,7 +225,7 @@ def change_direction():
         1 for wall on the left side of the robot and -1 for the right side
     """
     global direction, last_change_direction, rotating
-    print 'Change direction!'c28x_data=os.popen("curl -s http://169.254.254.169/cmd?=C01"+cmd).read().strip()
+    print 'Change direction!'
     elapsed_time = time.time() - last_change_direction_time # Elapsed time since last change direction
     if elapsed_time >= 20:
         last_change_direction = time.time()
@@ -243,7 +243,7 @@ def rotating():
     global direction
     msg = Twist()
     msg.linear.x = 0
-    msg.angular.z = direction*2
+    msg.angular.z = direction*0.2
     return msg
 
 
@@ -306,12 +306,12 @@ def slow_forward():
 def turn_right():
     msg = Twist()
     msg.linea.x = 0
-    msg.angular.z = -1
+    msg.angular.z = -0.4
     return msg
 
 
 def main():
-    global pub_, active_, hz, loop_index, main_state
+    global pub_, active_, hz, loop_index
     
     rospy.init_node('follow_wall')
     
@@ -339,71 +339,7 @@ def main():
         elif(main_state == 2 ):
             msg = turn_right()
         elif(main_state == 3 ):
-            
-            # Configure depth and color streams
-            pipeline = rs.pipeline()
-            config = rs.config()
-            config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-            config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-
-            # Start streaming
-            profile=pipeline.start(config)
-            depth_sensor = profile.get_device().first_depth_sensor()
-            depth_scale = depth_sensor.get_depth_scale()
-
-            try:
-                while True:
-                    # Wait for a coherent pair of frames: depth and color
-                    frames = pipeline.wait_for_frames()
-                    depth_frame = frames.get_depth_frame()
-                    color_frame = frames.get_color_frame()
-                    depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
-                    color_intrin = color_frame.profile.as_video_stream_profile().intrinsics
-                    depth_to_color_extrin = depth_frame.profile.get_extrinsics_to(color_frame.profile)
-                    if not depth_frame or not color_frame:
-                        continue
-                    color_image=np.asanyarray(color_frame.get_data())
-                    depth_image=np.asanyarray(depth_frame.get_data())
-                    hsv = cv2.cvtColor(color_image, cv2.COLOR_BGR2HSV) 
-                    lower = np.array([35,43,46]) 
-                    upper = np.array([77, 255, 255]) 
-                    mask = cv2.inRange(hsv,lower,upper)
-                    moments = cv2.moments(mask)
-	                res=cv2.bitwise_and(color_image,color_image,mask=mask)
-	                imgray=cv2.cvtColor(res, cv2.COLOR_BGR2GRAY)
-                    zeros=cv2.countNonZero(imgray)
-                    zero=float(zeros)/307200
-                	v=0
-	                w=0
-	                if zero>0.15:
-                        m00 = moments['m00']
-                    if m00 != 0:
-                        centroid_x = int(moments['m10']/m00)#Take X coordinate
-                        centroid_y = int(moments['m01']/m00)#Take Y coordinate
-                        cv2.circle(res, (centroid_x,centroid_y), 15, (0,0,255))
-                        depth_pixel=[centroid_x,centroid_y]
-                        if centroid_x<480 and centroid_y<640:  
-                            depth_value = depth_image[centroid_x,centroid_y].astype(float)
-                            depth_point = rs.rs2_deproject_pixel_to_point(depth_intrin, depth_pixel, depth_value*depth_scale)
-                            depth_point[1]-=0.08
-	                        depth_point[2]+=0.15
-	                        print(depth_point)
-	                        if depth_point[2]>0.2:
-		                        v=0.2
-		                        w=math.atan(depth_point[2]/depth_point[0])/(depth_point[2]/v)
-                    msg=Twist()
-                    msg.linear.X=v
-                    msg.angular.z=w
-                    cmd="%05.2f*%05.2f"%(msg.linear.x,msg.angular.z)
-                    print cmd
-	                c28x_data=os.popen("curl -s http://169.254.254.169/cmd?=C01"+cmd).read().strip()
-                    rate.sleep()
-        finally:
-            pipeline.stop()
-
-
-
-
+            msg =realsense()
         else:
             rospy.logerr('Unknown main state!')
         
@@ -411,8 +347,7 @@ def main():
         
         cmd="%05.2f*%05.2f"%(msg.linear.x,msg.angular.z)
         print cmd
-	    c28x_data=os.popen("curl -s http://169.254.254.169/cmd?=C01"+cmd).read().strip()
- 
+        concerto_data = os.popen("curl -s http://169.254.254.169/cmd?=C01"+cmd).read().strip()
         
         rate.sleep()
 
